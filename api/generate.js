@@ -12,7 +12,7 @@
 // 调一次 Claude 的小工具
 async function callClaude({ system, user, maxTokens, temperature }) {
   const payload = {
-    model: "claude-sonnet-4-20250514",
+    model: process.env.ANTHROPIC_MODEL || "claude-sonnet-4-6",
     max_tokens: maxTokens || 1200,
     system: system || "",
     messages: [{ role: "user", content: user }]
