@@ -900,6 +900,58 @@
     .star-icons { font-size: 18px; }
     .danger-note { font-size: 13px; color: var(--ink); font-weight: 700; margin-left: 8px; }
 
+    /* 严肃模式：只显示温柔卡，藏起扭蛋卡和等待卡 */
+    .preview-zone.serious-mode .share-card,
+    .preview-zone.serious-mode .waiting-card { display: none; }
+
+    .serious-card {
+      position: relative;
+      background: #fff;
+      border: 2.5px solid var(--line);
+      border-radius: 22px;
+      padding: 24px 22px 26px;
+      box-shadow: 6px 7px 0 var(--line);
+    }
+    .serious-tag {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--tomato-dark);
+      border: 1.5px solid var(--tomato);
+      border-radius: 999px;
+      padding: 2px 10px;
+      margin-bottom: 12px;
+    }
+    .serious-title { font-size: 26px; margin: 0 0 8px; line-height: 1.2; }
+    .serious-sub { color: var(--muted); font-size: 14px; line-height: 1.6; margin: 0 0 14px; }
+    .serious-quote {
+      color: #6f655c;
+      background: #faf6f2;
+      border-radius: 12px;
+      padding: 11px 13px;
+      margin: 0 0 16px;
+      font-size: 15px;
+      line-height: 1.6;
+    }
+    .serious-reply-block {
+      background: #fff3d6;
+      border: 2.5px solid var(--line);
+      border-radius: 16px;
+      padding: 15px 16px;
+      box-shadow: 3px 4px 0 var(--line);
+      display: grid;
+      gap: 12px;
+      justify-items: start;
+    }
+    .serious-reply-label { font-size: 14px; font-weight: 900; color: var(--tomato-dark); }
+    .serious-reply { margin: 0; font-size: 18px; font-weight: 800; line-height: 1.6; color: var(--ink); }
+    .serious-note {
+      margin: 16px 0 0;
+      color: #6f655c;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
     /* 黄标签现在在大标题下面，改成上间距 */
     .card-head .badge { margin: 9px 0 0; }
     .card-head .persona { margin: 0; }
@@ -1047,6 +1099,19 @@
         <div class="stamp">已投币</div>
       </article>
 
+      <article class="serious-card" id="seriousCard" hidden>
+        <div class="serious-tag">もしもし?</div>
+        <h2 class="serious-title">这条，先不扭蛋了 🤍</h2>
+        <p class="serious-sub">有些消息不适合开玩笑。但如果你想回爸妈一句，可以这样说——</p>
+        <p class="serious-quote" id="seriousQuote">“……”</p>
+        <div class="serious-reply-block">
+          <div class="serious-reply-label">💬 可以这样回</div>
+          <p class="serious-reply" id="seriousReply">……</p>
+          <button class="copy-reply" id="seriousCopyBtn" type="button">复制，去粘到聊天框 📋</button>
+        </div>
+        <p class="serious-note" id="seriousNote">……</p>
+      </article>
+
       <div class="restart-row">
         <button class="restart-btn" id="restartBtn" type="button">↺ 换一句再来</button>
       </div>
@@ -1068,6 +1133,10 @@
     const button = document.querySelector("#generateBtn");
     const studio = document.querySelector("#studio");
     const restartBtn = document.querySelector("#restartBtn");
+    const seriousCard = document.querySelector("#seriousCard");
+    const seriousQuote = document.querySelector("#seriousQuote");
+    const seriousReply = document.querySelector("#seriousReply");
+    const seriousNote = document.querySelector("#seriousNote");
     const dialogue = document.querySelector("#dialogue");
     const questionModal = document.querySelector("#questionModal");
     const questionBadge = document.querySelector(".question-badge");
@@ -1155,6 +1224,18 @@
       "危险等级": "⭐⭐⭐⭐ 高甜预警",
       "推荐应对": "妈你突然这么说，搞得我怪不好意思的😆 不过……有你这句我能开心一整天。",
       "今日保命": "这种话他们一年说不了几次，别急着岔开，好好接住它。"
+    };
+
+    // 严肃模式：不扭蛋、不玩梗，只给一句真诚得体的回应 + 一句温柔提醒
+    const SERIOUS_PROMPT = `你是一个温柔、有分寸的助手。用户收到一条父母/长辈发来的、关于沉重或悲伤的消息（例如亲友去世、重病、住院、意外、坏消息）。这种时刻绝不能开玩笑、玩梗、调侃。
+请帮用户想一句"能直接发给爸妈的、真诚得体的回应"：简短、像真人会发的微信、带着关心；符合中国家庭语感（不必用"节哀顺变""我爱你"这种生硬客套，可以是朴素的关心、陪伴、或反过来问问爸妈的状态）。再给一句"对用户说的悄悄话"，温柔地提醒怎么陪伴爸妈。
+输出格式（纯文本，不要 Markdown，严格按字段名）：
+【温柔回应】……（一两句，能直接发给爸妈）
+【悄悄说】……（一句，对用户说的温柔提醒）`;
+
+    const SERIOUS_FALLBACK = {
+      "温柔回应": "爸，我看到了。你还好吗？别一个人扛着，想说话随时给我打电话。",
+      "悄悄说": "这种时候不用说得多漂亮，让爸妈知道你在，比任何金句都重要。"
     };
 
     // 把模型返回的【字段】文本，解析成对象
@@ -1303,7 +1384,19 @@
 
       button.disabled = true;
       button.textContent = "识别中…";
-      flow.mode = await detectMode(msg);   // 第一次调用：判断对抗 / 温情
+      flow.mode = await detectMode(msg);   // 第一次调用：判断对抗 / 温情 / 严肃
+      button.disabled = false;
+      button.textContent = "重新投币";
+
+      // 严肃/悲伤的消息：不扭蛋，直接走温柔卡
+      if (flow.mode === "严肃") {
+        handleSerious(msg);
+        return;
+      }
+
+      // 普通流程：先清掉可能残留的严肃状态
+      previewZone.classList.remove("serious-mode");
+      seriousCard.hidden = true;
 
       // 按模式装好第三题（皮肤）
       steps[2].question = Q3_TEXT[flow.mode];
@@ -1316,11 +1409,42 @@
         parentRole: "妈妈",
         replyPersona: steps[2].options[0].value
       };
-      button.disabled = false;
-      button.textContent = "重新投币";
       previewZone.classList.add("is-waiting");
       questionModal.hidden = false;
       renderDialogue();
+    }
+
+    // 严肃模式：出一张温柔卡（不玩梗），给一句能发的真诚回应
+    async function handleSerious(text) {
+      showStep("result");
+      previewZone.classList.remove("is-waiting");
+      previewZone.classList.add("serious-mode");
+      seriousCard.hidden = false;
+      seriousQuote.textContent = `“${text}”`;
+      seriousReply.textContent = "正在想一句合适的话…";
+      seriousNote.textContent = "";
+
+      let f;
+      try {
+        const res = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            task: "card",
+            system: SERIOUS_PROMPT,
+            user: `家长发来的话：「${text}」\n请给出能回这位长辈的话。`
+          })
+        });
+        const data = await res.json();
+        const out = (data.text || "").trim();
+        if (!out) throw new Error("empty");
+        f = parseFields(out);
+        if (!f["温柔回应"]) throw new Error("nofield");
+      } catch (e) {
+        f = SERIOUS_FALLBACK;
+      }
+      seriousReply.textContent = f["温柔回应"] || SERIOUS_FALLBACK["温柔回应"];
+      seriousNote.textContent = f["悄悄说"] || SERIOUS_FALLBACK["悄悄说"];
     }
 
     function answerStep(key, value) {
@@ -1454,12 +1578,25 @@
       });
     });
 
+    // 复制严肃模式那句温柔回应
+    document.querySelector("#seriousCopyBtn").addEventListener("click", (e) => {
+      const t = seriousReply.textContent.replace(/^[“"]|[”"]$/g, "");
+      navigator.clipboard.writeText(t).then(() => {
+        const btn = e.target;
+        const old = btn.textContent;
+        btn.textContent = "✅ 已复制，去微信粘贴吧";
+        setTimeout(() => { btn.textContent = old; }, 1800);
+      });
+    });
+
     // "换一句再来"：回到第一屏，清空，重置流程
     restartBtn.addEventListener("click", () => {
       flow.active = false;
       flow.step = 0;
       input.value = "";
       button.textContent = "开始投币";
+      previewZone.classList.remove("serious-mode");
+      seriousCard.hidden = true;
       showStep("input");
       input.focus();
     });

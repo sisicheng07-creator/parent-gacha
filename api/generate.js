@@ -30,7 +30,11 @@ async function callClaude({ system, user, maxTokens }) {
 }
 
 const MODE_SYSTEM =
-  "判断这句'中国父母/长辈发来的话'属于哪类。对抗类=唠叨、催促、挑剔、讲道理、夺命关心、抱怨。温情类=夸奖、心疼、想你、示弱、道歉、单纯表达爱或关心。只回答两个字：对抗 或 温情。";
+  "判断这句'中国父母/长辈发来的话'属于哪类，只回答两个字：\n" +
+  "- 严肃：涉及死亡、亲友去世、重病、生病住院、意外、灾祸、失业、离婚、严重坏消息、或明显的悲伤/沉重情绪。这类绝不能开玩笑。\n" +
+  "- 温情：夸奖、心疼、想你、示弱、道歉、单纯表达爱或关心。\n" +
+  "- 对抗：唠叨、催促、挑剔、讲道理、夺命关心、抱怨。\n" +
+  "优先级：只要沾到第一类（严肃/悲伤/坏消息），就回答'严肃'。否则在'温情'和'对抗'里选。只回答两个字：严肃 或 温情 或 对抗。";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -44,7 +48,9 @@ export default async function handler(req, res) {
     if (task === "mode") {
       if (!text) return res.status(400).json({ error: "missing text" });
       const out = await callClaude({ system: MODE_SYSTEM, user: text, maxTokens: 10 });
-      const mode = out.includes("温情") ? "温情" : "对抗";
+      let mode = "对抗";
+      if (out.includes("严肃")) mode = "严肃";
+      else if (out.includes("温情")) mode = "温情";
       return res.status(200).json({ mode });
     }
 
