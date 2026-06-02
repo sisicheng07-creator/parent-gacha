@@ -5,12 +5,21 @@
 // 放在 /api 文件夹里，Vercel 会自动把它变成接口：你的网址/api/generate
 //
 // 支持两种任务（前端用 task 字段指定）：
-//   task: "mode"  → 只判断这句话是"对抗"还是"温情"
+//   task: "mode"  → 只判断这句话是"对抗 / 温情 / 严肃"
 //   task: "card"  → 生成整张图鉴卡（默认）
 // ============================================================
 
 // 调一次 Claude 的小工具
-async function callClaude({ system, user, maxTokens }) {
+async function callClaude({ system, user, maxTokens, temperature }) {
+  const payload = {
+    model: "claude-sonnet-4-20250514",
+    max_tokens: maxTokens || 1200,
+    system: system || "",
+    messages: [{ role: "user", content: user }]
+  };
+  // Claude 的 temperature 取值是 0~1；只在显式传了才带上（不传就用默认）
+  if (typeof temperature === "number") payload.temperature = temperature;
+
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -18,13 +27,16 @@ async function callClaude({ system, user, maxTokens }) {
       "x-api-key": process.env.ANTHROPIC_API_KEY, // ← 钥匙从环境变量读
       "anthropic-version": "2023-06-01"
     },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: maxTokens || 1200,
-      system: system || "",
-      messages: [{ role: "user", content: user }]
-    })
+    body: JSON.stringify(payload)
   });
+
+  // 调失败时别静默吞掉——把错误打到 Vercel 日志，方便排查
+  if (!r.ok) {
+    const detail = await r.text().catch(() => "");
+    console.error("Anthropic error:", r.status, detail);
+    return "";
+  }
+
   const data = await r.json();
   return (data.content || []).map((b) => b.text || "").join("").trim();
 }
@@ -42,12 +54,23 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { task, system, user, text } = req.body || {};
+    // Vercel 一般会自动把 JSON body 解析好；万一拿到的是字符串，这里兜底再解一次
+    let body = req.body;
+    if (typeof body === "string") {
+      try { body = JSON.parse(body); } catch { body = {}; }
+    }
+    body = body || {};
 
-    // 任务一：判断模式
+    // 给输入加个长度上限，挡住超长 prompt 刷爆 token 账单
+    const clip = (s) => (typeof s === "string" ? s.slice(0, 4000) : s);
+    const { task, system } = body;
+    const user = clip(body.user);
+    const text = clip(body.text);
+
+    // 任务一：判断模式（要稳定，用 temperature 0）
     if (task === "mode") {
       if (!text) return res.status(400).json({ error: "missing text" });
-      const out = await callClaude({ system: MODE_SYSTEM, user: text, maxTokens: 10 });
+      const out = await callClaude({ system: MODE_SYSTEM, user: text, maxTokens: 10, temperature: 0 });
       let mode = "对抗";
       if (out.includes("严肃")) mode = "严肃";
       else if (out.includes("温情")) mode = "温情";

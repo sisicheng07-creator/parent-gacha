@@ -1248,12 +1248,15 @@
     }
 
     // 本地兜底：用关键词粗略判断模式（调不通后端时用）
+    // 先查"严肃"——把丧事/重病当成玩笑是最糟的事故，宁可错杀也要拦住
     function localGuessMode(text) {
+      const serious = ["去世","过世","离世","病危","病重","重病","住院","手术","化疗","抢救","癌","葬礼","出殡","车祸","骨折","瘫","失业","下岗","离婚"];
+      if (serious.some((w) => text.includes(w))) return "严肃";
       const warm = ["厉害","棒","骄傲","想你","辛苦","爱你","乖","优秀","开心","最好","真好","加油","宝贝","懂事","贴心","好孩子","真乖","为你高兴","真不错","了不起"];
       return warm.some((w) => text.includes(w)) ? "温情" : "对抗";
     }
 
-    // 第一次调用：让后端调 Claude 判断这句是"对抗"还是"温情"
+    // 第一次调用：让后端调模型判断这句是"对抗 / 温情 / 严肃"
     async function detectMode(text) {
       try {
         const res = await fetch("/api/generate", {
@@ -1262,7 +1265,7 @@
           body: JSON.stringify({ task: "mode", text })
         });
         const data = await res.json();
-        if (data.mode === "温情" || data.mode === "对抗") return data.mode;
+        if (data.mode === "温情" || data.mode === "对抗" || data.mode === "严肃") return data.mode;
         throw new Error("unclear");
       } catch (e) {
         return localGuessMode(text);  // 调不通就本地粗判
@@ -1536,7 +1539,7 @@
       if (msg) msg.innerHTML = '<div class="waiting-coin">币</div><div>扭蛋机轰隆隆运转中…<br>正在解析这位长辈</div>';
     }
 
-    // ============ 核心：调真 Claude 生成（调不通就退回演示数据） ============
+    // ============ 核心：调真模型生成（调不通就退回演示数据） ============
     async function generateCard() {
       const meta = {
         text: input.value.trim() || "我妈疯狂发信息",
@@ -1548,7 +1551,7 @@
       setLoading();
 
       try {
-        // 第二次调用：让后端调 Claude 生成整张卡
+        // 第二次调用：让后端调模型生成整张卡
         const res = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
